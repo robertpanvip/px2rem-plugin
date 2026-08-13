@@ -5,15 +5,18 @@ fun properties(key: String) = project.findProperty(key).toString()
 
 plugins {
     id("java")
-    id("org.jetbrains.kotlin.jvm") version "1.9.10"
-    id("org.jetbrains.intellij") version "1.16.0"
-    id("org.jetbrains.changelog") version "2.2.0"
+    id("org.jetbrains.kotlin.jvm") version "2.0.21"
+    id("org.jetbrains.intellij") version "1.17.4"
+    id("org.jetbrains.changelog") version "2.2.1"
 }
 
 group = properties("pluginGroup")
 version = properties("pluginVersion")
 
 repositories {
+    maven { url = uri("https://maven.aliyun.com/repository/public") }
+    maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
+    maven { url = uri("https://maven.aliyun.com/repository/jetbrains") }
     mavenCentral()
 }
 
@@ -25,9 +28,7 @@ intellij {
     updateSinceUntilBuild.set(true)
     plugins.set(listOf(
         "JavaScript",
-        "com.intellij.css",
-        "org.jetbrains.plugins.webDeployment:232.8660.185",
-        "org.intellij.plugins.markdown:$version"
+        "com.intellij.css"
     ))
 }
 
@@ -44,6 +45,7 @@ tasks {
         }
         withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
             kotlinOptions.jvmTarget = it
+            kotlinOptions.freeCompilerArgs = listOf("-Xjvm-default=all")
         }
     }
 
@@ -97,6 +99,6 @@ tasks {
 dependencies {
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("org.yaml:snakeyaml:2.2")
-    testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")
+    testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testImplementation("org.mockito:mockito-core:5.5.0")
 }
