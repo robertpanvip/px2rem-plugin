@@ -1,0 +1,65 @@
+name: Build & Test
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  build-test:
+    name: Build plugin and run tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: 8.14.5
+          cache-write-only: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
+
+      - name: Generate Gradle Wrapper
+        run: gradle wrapper --gradle-version 8.14.5
+
+      - name: Gradle Wrapper validation
+        uses: gradle/actions/wrapper-validation@v6
+
+      - name: Run tests
+        run: ./gradlew test --no-daemon
+
+      - name: Build plugin (verify distribution assembles)
+        run: ./gradlew buildPlugin --no-daemon
+
+      - name: Upload test report (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-report
+          path: |
+            build/reports/tests/test/
+            build/test-results/test/
+
+      - name: Upload plugin zip (snapshot artifact)
+        uses: actions/upload-artifact@v6
+        with:
+          name: ReactUnitConverter-snapshot
+          path: build/distributions/*.zip
+          if-no-files-found: warn
+          retention-days: 14
