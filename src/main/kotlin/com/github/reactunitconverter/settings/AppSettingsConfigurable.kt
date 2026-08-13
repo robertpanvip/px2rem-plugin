@@ -14,7 +14,9 @@ import javax.swing.JPanel
  * Application-level (global) settings: default conversion parameters when a project
  * has no px2rem config, CSS Module import name, and general UI behaviour.
  */
-class AppSettingsConfigurable : BaseConfigurable("React Unit Converter") {
+class AppSettingsConfigurable : BaseConfigurable() {
+
+    override fun getDisplayName(): String = "React Unit Converter"
 
     private lateinit var unitField: JBTextField
     private lateinit var rootValue: JBTextField

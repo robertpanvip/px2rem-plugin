@@ -5,6 +5,7 @@ import com.github.reactunitconverter.service.ProjectConfigService
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.options.BaseConfigurable
 import com.intellij.openapi.project.Project
 import com.intellij.ui.JBIntSpinner
@@ -22,7 +23,9 @@ import javax.swing.JPanel
  * Per-project settings. Shows the last auto-detected px2rem config and lets the user
  * override specific values, or re-detect from Vite/Rsbuild/PostCSS config files.
  */
-class ProjectSettingsConfigurable(private val project: Project) : BaseConfigurable("React Unit Converter Project") {
+class ProjectSettingsConfigurable(private val project: Project) : BaseConfigurable() {
+
+    override fun getDisplayName(): String = "React Unit Converter Project"
 
     private lateinit var overrideBox: JBCheckBox
     private lateinit var detectedLabel: JBLabel
@@ -73,9 +76,11 @@ class ProjectSettingsConfigurable(private val project: Project) : BaseConfigurab
         val infoPanel = JPanel(BorderLayout()).apply {
             add(detectedLabel, BorderLayout.CENTER)
         }
-        val toolbar = ToolbarDecorator.createDecorator(infoPanel)
-            .addAction(redetectAction)
-            .createPanel()
+        // Use the action group toolbar approach instead of addAction (may not exist in newer versions)
+        val actionGroup = DefaultActionGroup(redetectAction)
+        val toolbarDecorator = ToolbarDecorator.createDecorator(infoPanel)
+        toolbarDecorator.setActionGroup(actionGroup)
+        val toolbar = toolbarDecorator.createPanel()
 
         val form = FormBuilder.createFormBuilder()
             .addComponent(toolbar)

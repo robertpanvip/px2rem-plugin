@@ -105,9 +105,10 @@ class PxToRemHelperService(private val project: Project) {
         needVw: Boolean = false,
         importAlias: String? = null,
     ) {
-        val document = com.intellij.openapi.fileEditor.FileDocumentManager.getInstance().getDocument(psiFile.virtualFile)
+        val vFile = psiFile.virtualFile ?: return
+        val document = com.intellij.openapi.fileEditor.FileDocumentManager.getInstance().getDocument(vFile)
             ?: return
-        val spec = relativeImportSpec(psiFile.virtualFile, helper)
+        val spec = relativeImportSpec(vFile, helper)
         val named = buildString {
             append(FUN_PX_TO_REM)
             if (needVw) { append(", ").append(FUN_PX_TO_VW) }
@@ -122,9 +123,11 @@ class PxToRemHelperService(private val project: Project) {
             .withName("Add pxToRem helper import")
             .run<Throwable> {
                 if (existing != null) {
-                    val range = existing.groups[1]!!.range
-                    val before = existing.groupValues[1]
-                    val newNames = mergeNamed(before, FUN_PX_TO_REM, if (needVw) FUN_PX_TO_VW else null)
+                    val group1 = existing.groups[1]!!
+                    val before = group1.value.orEmpty()
+                    val wants = mutableListOf(FUN_PX_TO_REM)
+                    if (needVw) wants += FUN_PX_TO_VW
+                    val newNames = mergeNamed(before, *wants.toTypedArray())
                     val startAbs = existing.range.first + existing.value.indexOf('{') + 1
                     val endAbs = startAbs + before.length
                     document.replaceString(startAbs, endAbs, newNames)

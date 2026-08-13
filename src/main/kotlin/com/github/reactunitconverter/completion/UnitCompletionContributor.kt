@@ -6,7 +6,11 @@ import com.intellij.codeInsight.lookup.LookupElementBuilder
 import com.intellij.lang.javascript.psi.JSLiteralExpression
 import com.intellij.lang.javascript.psi.JSProperty
 import com.intellij.patterns.PlatformPatterns
+import com.intellij.psi.xml.XmlAttribute
+import com.intellij.psi.xml.XmlElement
 import com.intellij.util.ProcessingContext
+import kotlin.math.pow
+import kotlin.math.round
 
 /**
  * Adds completions like "16rem" / "1.6vw" derived from a typed "16px" literal
@@ -36,8 +40,7 @@ class UnitCompletionContributor : CompletionContributor() {
                 val vpWidth = cfg.viewportWidth
                 val prec = cfg.unitPrecision
                 fun fmt(n: Double): String {
-                    val rnd = kotlin.math.round(n * kotlin.math.pow(10.0, prec.toDouble())) /
-                            kotlin.math.pow(10.0, prec.toDouble())
+                    val rnd = round(n * 10.0.pow(prec.toDouble())) / 10.0.pow(prec.toDouble())
                     var s = rnd.toString()
                     if ('.' in s) {
                         while (s.endsWith('0')) s = s.dropLast(1)
@@ -70,11 +73,11 @@ class UnitCompletionContributor : CompletionContributor() {
     private fun insideStyleAttr(prop: JSProperty): Boolean {
         var cur: com.intellij.psi.PsiElement? = prop.parent
         while (cur != null) {
-            if (cur is com.intellij.lang.javascript.psi.JSXAttribute) {
+            if (cur is XmlAttribute) {
                 val name = cur.name?.trim()
                 if (name.equals("style", ignoreCase = true) || name?.endsWith("Style") == true) return true
             }
-            if (cur is com.intellij.lang.javascript.psi.JSXElement || cur is com.intellij.lang.javascript.psi.JSFile) return false
+            if (cur is XmlElement || cur is com.intellij.lang.javascript.psi.JSFile) return false
             cur = cur.parent
         }
         return false

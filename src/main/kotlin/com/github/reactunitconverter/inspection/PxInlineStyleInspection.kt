@@ -8,8 +8,12 @@ import com.intellij.codeInspection.ProblemHighlightType
 import com.intellij.codeInspection.ProblemsHolder
 import com.intellij.lang.javascript.psi.JSObjectLiteralExpression
 import com.intellij.lang.javascript.psi.JSRecursiveElementVisitor
+import com.intellij.openapi.fileEditor.FileDocumentManager
+import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiElementVisitor
+import com.intellij.psi.xml.XmlAttribute
+import com.intellij.psi.xml.XmlElement
 
 /**
  * Weak warning that flags React inline style objects containing px values that
@@ -36,23 +40,34 @@ class PxInlineStyleInspection : LocalInspectionTool() {
                     val relEnd = (sample.range.last + 1).coerceAtMost(text.length)
                     node.textRange.startOffset + relStart to node.textRange.startOffset + relEnd
                 } else node.textRange.startOffset to node.textRange.endOffset
-                // create a lightweight synthetic element
-                val document = com.intellij.openapi.editor.DocumentManager.getInstance().getDocument(node.containingFile.virtualFile)
+                // use the start offset to pick a leaf element inside the node
+                val vFile = node.containingFile.virtualFile
+                val document = if (vFile != null) FileDocumentManager.getInstance().getDocument(vFile) else null
                 val startOffset = markRange.first
                 val endOffset = markRange.second
                 val leaf = node.containingFile.findElementAt(startOffset) ?: node
                 val msg = "Inline style has '${sample.original}' which can convert to ${sample.converted} (${cfg.unitToConvert}; source=${cfg.source})"
-                val desc = object : com.intellij.codeInspection.CommonProblemDescriptorBase(
-                    leaf, msg, true, arrayOf(QuickFix(node.text)), ProblemHighlightType.WEAK_WARNING, false, null, true
-                ) {
-                    override fun getTextRangeInElement(): com.intellij.openapi.util.TextRange {
-                        val base = leaf.textRange
-                        val start = (startOffset - base.startOffset).coerceAtLeast(0)
-                        val end = (endOffset - base.startOffset).coerceAtMost(base.length)
-                        return com.intellij.openapi.util.TextRange(start, end)
-                    }
+                // register via holder's range-aware method on the leaf element with relative range
+                val relativeStart = (startOffset - leaf.textRange.startOffset).coerceAtLeast(0)
+                val relativeEnd = (endOffset - leaf.textRange.startOffset).coerceAtMost(leaf.textRange.length)
+                if (relativeEnd > relativeStart) {
+                    val rangeInLeaf = TextRange(relativeStart, relativeEnd)
+                    holder.registerProblem(
+                        leaf,
+                        msg,
+                        ProblemHighlightType.WEAK_WARNING,
+                        rangeInLeaf,
+                        QuickFix(node.text)
+                    )
+                } else {
+                    holder.registerProblem(
+                        node,
+                        msg,
+                        ProblemHighlightType.WEAK_WARNING,
+                        null as TextRange?,
+                        QuickFix(node.text)
+                    )
                 }
-                holder.registerProblem(desc)
             }
         }
     }
@@ -60,11 +75,11 @@ class PxInlineStyleInspection : LocalInspectionTool() {
     private fun isInsideStyleAttr(obj: JSObjectLiteralExpression): Boolean {
         var cur: PsiElement? = obj.parent
         while (cur != null) {
-            if (cur is com.intellij.lang.javascript.psi.JSXAttribute) {
+            if (cur is XmlAttribute) {
                 val name = cur.name?.trim()
                 if (name.equals("style", ignoreCase = true) || name?.endsWith("Style") == true) return true
             }
-            if (cur is com.intellij.lang.javascript.psi.JSXElement || cur is com.intellij.lang.javascript.psi.JSFile) return false
+            if (cur is XmlElement || cur is com.intellij.lang.javascript.psi.JSFile) return false
             cur = cur.parent
         }
         return false

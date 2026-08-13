@@ -11,6 +11,7 @@ import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
+import com.intellij.openapi.util.TextRange
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
@@ -18,6 +19,8 @@ import com.intellij.psi.PsiManager
 import com.intellij.psi.SmartPointerManager
 import com.intellij.psi.codeStyle.CodeStyleManager
 import com.intellij.psi.util.PsiTreeUtil
+import com.intellij.psi.xml.XmlAttribute
+import com.intellij.psi.xml.XmlElement
 import com.intellij.util.IncorrectOperationException
 
 /**
@@ -100,13 +103,13 @@ class ConvertInlineStyleAction : BaseIntentionAction() {
                     }
                 }
                 PsiManager.getInstance(project).reloadFromDisk(file)
-                CodeStyleManager.getInstance(project).reformatText(
-                    file,
-                    pointers.mapNotNull { p ->
-                        val e = p.first.element ?: return@mapNotNull null
-                        e.textRange.startOffset to e.textRange.endOffset
-                    }.takeIf { it.isNotEmpty() } ?: emptyList()
-                )
+                val ranges: Collection<TextRange> = pointers.mapNotNull { p ->
+                    val e = p.first.element ?: return@mapNotNull null
+                    TextRange(e.textRange.startOffset, e.textRange.endOffset)
+                }
+                if (ranges.isNotEmpty()) {
+                    CodeStyleManager.getInstance(project).reformatText(file, ranges)
+                }
             }
     }
 
@@ -140,14 +143,14 @@ class ConvertInlineStyleAction : BaseIntentionAction() {
             var cur: PsiElement? = leaf
             while (cur != null) {
                 if (cur is JSObjectLiteralExpression && isInsideStyleAttr(cur)) return cur
-                if (cur is JSXElement || cur is JSFile) return null
+                if (cur is XmlElement || cur is JSFile) return null
                 cur = cur.parent
             }
             return null
         }
 
         private fun isInsideStyleAttr(obj: JSObjectLiteralExpression): Boolean {
-            val attr = PsiTreeUtil.getParentOfType(obj, JSXAttribute::class.java) ?: return false
+            val attr = PsiTreeUtil.getParentOfType(obj, XmlAttribute::class.java) ?: return false
             val name = attr.name?.trim() ?: return false
             if (name.equals("style", ignoreCase = true) || name.endsWith("Style", ignoreCase = false)) {
                 return true
@@ -166,13 +169,12 @@ class ConvertInlineStyleAction : BaseIntentionAction() {
         }
 
         @JvmStatic
-        fun extractStyleObjectText(attribute: JSXAttribute): Pair<String, IntRange>? {
+        fun extractStyleObjectText(attribute: XmlAttribute): Pair<String, IntRange>? {
             // style={{ ... }}  => the inner JSObjectLiteralExpression (second level)
-            val value = attribute.value as? com.intellij.lang.javascript.psi.JSExpression ?: return null
-            val inner = when (value) {
-                is JSObjectLiteralExpression -> value // style={ {...} } - no extra braces (unlikely valid in JSX)
-                else -> PsiTreeUtil.findChildOfType(value, JSObjectLiteralExpression::class.java)
-            } ?: return null
+            val value = attribute.valueElement as? com.intellij.psi.PsiElement ?: return null
+            val inner = PsiTreeUtil.findChildOfType(value, JSObjectLiteralExpression::class.java)
+                ?: (value as? JSObjectLiteralExpression)
+                ?: return null
             return inner.text to inner.textRange.startOffset.let { s -> s until s + inner.text.length }
         }
     }

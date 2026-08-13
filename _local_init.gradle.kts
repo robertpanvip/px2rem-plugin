@@ -1,8 +1,24 @@
 // _local_init.gradle.kts —— 放到项目根，通过 ./gradlew --init-script _local_init.gradle.kts 调用
-// CI 中也同样使用该 init 脚本：./gradlew --init-script _local_init.gradle.kts <task>
-// 作用：
-//   1) 把 project/buildscript 里所有声明的 mavenCentral() / gradlePluginPortal() 的 URL 替换成腾讯云镜像（加速并避免触发中央仓 429 限流）
-//   2) 为 JetBrains IntelliJ Platform SDK 追加专用 releases/snapshots 仓（按 group 白名单限定）
+
+// ---------------- pluginManagement 走腾讯 ----------------
+settingsEvaluated {
+    pluginManagement {
+        repositories.clear()
+        repositories {
+            maven {
+                name = "TencentGradlePluginsInit"
+                url = uri("https://mirrors.cloud.tencent.com/nexus/repository/gradle-plugins/")
+            }
+            maven {
+                name = "TencentMavenPublicInit"
+                url = uri("https://mirrors.cloud.tencent.com/nexus/repository/maven-public/")
+            }
+            // 最后官仓兜底
+            gradlePluginPortal()
+            mavenCentral()
+        }
+    }
+}
 
 // ---------------- 所有项目级 repo 替换成腾讯 + JetBrains 专用仓 ----------------
 allprojects {
