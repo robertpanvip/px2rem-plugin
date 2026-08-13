@@ -71,13 +71,13 @@ class InlineStylePxConverter(
         val result = mutableListOf<Conversion>()
 
         // Pass 1: find explicit `"Npx"` / `'Npx'` / ``Npx`` string values
-        val pxStringRegex = Regex("""(['"`])\s*(-?\d+(?:\.\d+)?)\s*px\s*\1""", RegexOption.IGNORE_CASE)
+        val pxStringRegex = Regex("((?:'|\"|`))\\s*(-?\\d+(?:\\.\\d+)?)\\s*px\\s*\\1", RegexOption.IGNORE_CASE)
         for (m in pxStringRegex.findAll(styleBlock)) {
             val numStr = m.groupValues[2]
             val num = numStr.toDoubleOrNull() ?: continue
-            val prop = findPropNameBefore(styleBlock, m.range.first) ?: continue
+            val prop = findPropNameBefore(styleBlock, m.range.last) ?: continue
             if (!cfg.isPropAllowed(cssPropOf(prop))) continue
-            if (kotlin.math.abs(num) <= cfg.minPixelValue + 1e-9) continue
+            if (kotlin.math.abs(num) + 1e-9 < cfg.minPixelValue) continue
             val converted = formatNumber(convertPx(num)) + unitSuffix()
             result += Conversion(m.range, m.value, "\"$converted\"", num)
             convertedStaticLiterals++
@@ -93,7 +93,7 @@ class InlineStylePxConverter(
             if (!cfg.isPropAllowed(cssPropOf(prop))) continue
             val numStr = m.groupValues[2]
             val num = numStr.toDoubleOrNull() ?: continue
-            if (kotlin.math.abs(num) <= cfg.minPixelValue + 1e-9) continue
+            if (kotlin.math.abs(num) + 1e-9 < cfg.minPixelValue) continue
             // the match captured the last trailing char (,}]), don't include it
             val colonIdx = styleBlock.indexOf(':', m.range.first)
             val startOfNum = colonIdx + 1
@@ -116,7 +116,7 @@ class InlineStylePxConverter(
                 // try find prop for the overall calc() value
                 val prop = findPropNameBefore(styleBlock, m.range.first) ?: continue
                 if (!cfg.isPropAllowed(cssPropOf(prop))) continue
-                if (kotlin.math.abs(num) <= cfg.minPixelValue + 1e-9) continue
+                if (kotlin.math.abs(num) + 1e-9 < cfg.minPixelValue) continue
                 val absRange = (m.range.first + 1 + sub.range.first)..(m.range.first + 1 + sub.range.last)
                 val converted = formatNumber(convertPx(num)) + unitSuffix()
                 result += Conversion(absRange, sub.value, "$converted", num)
@@ -153,9 +153,10 @@ class InlineStylePxConverter(
             val valueSrc = styleBlock.substring(valueRange)
             // Skip values we already converted: pure quoted "Npx" string / pure number literal
             if (isStaticPxStringLiteral(valueSrc) || isBareNumericLiteral(valueSrc)) continue
-            // Skip already wrapped helper calls
+            // Skip already wrapped helper calls (idempotent: don't wrap wrappers of either unit)
             val head = valueSrc.trimStart()
-            if (head.startsWith("$effectiveHelperName(")) continue
+            if (head.startsWith("pxToRem(") || head.startsWith("pxToVw(") ||
+                head.startsWith("pxToVh(") || head.startsWith("$effectiveHelperName(")) continue
             // Skip template strings / nested object / arrays (spreads captured in ...x form aren't value props)
             if (head.startsWith("`") || head.startsWith("{") || head.startsWith("[")) continue
             // For a logical-and `cond && <styleValue>` or `a || b` we only want to wrap the RHS / both sides
@@ -360,8 +361,8 @@ class InlineStylePxConverter(
 
     private fun formatNumber(n: Double): String {
         val precision = cfg.unitPrecision.coerceIn(0, 12)
-        val rounded = kotlin.math.round(n * kotlin.math.pow(10.0, precision.toDouble())) /
-                kotlin.math.pow(10.0, precision.toDouble())
+        val factor = Math.pow(10.0, precision.toDouble())
+        val rounded = Math.round(n * factor) / factor
         // drop trailing zeros and potential '.'
         var s = rounded.toString()
         if (precision == 0) return s
@@ -427,7 +428,7 @@ class InlineStylePxConverter(
                     c == '"' || c == '\'' || c == '`' -> {
                         val s = skipStringBack(source, pos)
                         if (s == -1) return null
-                        pos = s
+                        pos = s - 1
                         continue
                     }
                     c == '}' || c == ']' -> depth++

@@ -13,8 +13,9 @@ class DynamicInlineStyleConversionTest {
         val c = InlineStylePxConverter(cfg)
         val style = """{ width: cardWidth, marginTop: spacing + 4, height: computeH() }"""
         val convs = c.scan(style)
-        assertEquals(1, c.wrappedDynamicExpressions)
-        // width: cardWidth
+        // width: cardWidth; marginTop: spacing + 4; height: computeH() → 3 dynamic values in total
+        assertEquals(3, c.wrappedDynamicExpressions,
+            "expected 3 dynamic wraps (cardWidth / spacing+4 / computeH()), got ${c.wrappedDynamicExpressions} with convs=$convs")
         assertTrue(convs.any { it.original.trim() == "cardWidth" && it.converted == "pxToRem(cardWidth)" })
         // binary spacing+4 wrapped too
         assertTrue(convs.any { it.isDynamic && it.original.contains("spacing + 4") && it.converted.startsWith("pxToRem(spacing + 4)") })

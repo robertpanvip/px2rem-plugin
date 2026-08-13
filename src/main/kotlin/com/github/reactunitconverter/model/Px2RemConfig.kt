@@ -38,9 +38,12 @@ data class Px2RemConfig(
     val exclude: List<String> = emptyList(),
 ) {
     /** Returns true if the given CSS property name should be converted,
-     *  based on propList semantics ("*", "!prop", wildcards with '*'). */
+     *  based on propList semantics ("*", "!prop", wildcards with '*').
+     *
+     *  Accepts both React camelCase (`fontSize`) and CSS kebab-case (`font-size`);
+     *  normalizes to kebab-case before comparing to `propList`. */
     fun isPropAllowed(propName: String): Boolean {
-        val normalized = propName.trim()
+        val normalized = cssPropOfString(propName.trim())
         if (propList.isEmpty()) return true
         val allowAll = propList.any { it == "*" }
         val explicitInclude = propList.filter { !it.startsWith("!") && it != "*" }
@@ -59,5 +62,44 @@ data class Px2RemConfig(
 
     companion object {
         val DEFAULT: Px2RemConfig = Px2RemConfig()
+
+        /** Normalize React camelCase or CSS kebab-case prop names to kebab-case. */
+        internal fun cssPropOfString(propName: String): String {
+            val chars = propName.toCharArray()
+            val sb = StringBuilder(propName.length + 4)
+            var i = 0
+            var prevDash = true
+            while (i < chars.size) {
+                val ch = chars[i]
+                when {
+                    ch == '-' || ch == '_' || ch.isWhitespace() -> {
+                        if (!prevDash) sb.append('-')
+                        prevDash = true
+                    }
+                    ch.isUpperCase() -> {
+                        // Smart camel-case split:
+                        //  - "fontSize" -> "font-size" (insert before uppercase when prev is lowercase)
+                        //  - "WIDTH" -> "width" (consecutive uppercase: don't insert dashes inside acronym)
+                        //  - "HTMLParser" -> "html-parser" (insert before last uppercase of run if followed by lowercase)
+                        val nextIsLower = (i + 1 < chars.size && chars[i + 1].isLowerCase())
+                        val prevIsUpper = (i > 0 && chars[i - 1].isUpperCase())
+                        if (!prevDash && (!prevIsUpper || nextIsLower)) sb.append('-')
+                        sb.append(ch.lowercase())
+                        prevDash = false
+                    }
+                    else -> {
+                        sb.append(ch.lowercase())
+                        prevDash = false
+                    }
+                }
+                i++
+            }
+            var s = sb.toString().trim('-')
+            if (s.startsWith("webkit-")) s = "-webkit-$s"
+            else if (s.startsWith("moz-")) s = "-moz-$s"
+            else if (s.startsWith("ms-")) s = "-ms-$s"
+            else if (s.startsWith("o-")) s = "-o-$s"
+            return s
+        }
     }
 }

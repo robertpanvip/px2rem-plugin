@@ -27,14 +27,16 @@ object ClassNameInferencer {
     /** Suggest a class name, guaranteed not to conflict with existing. */
     fun suggest(context: Context): String {
         val candidates = buildList {
-            // 1) from existing className on this element: take last segment or meaningful part
+            // 0) Preserve existing className *as a whole* before splitting into segments.
+            //    e.g. "card-header-item" first suggests "cardHeaderItem", which is what users expect.
             if (!context.currentClassName.isNullOrBlank()) {
+                add(context.currentClassName)
                 splitClassNames(context.currentClassName).forEach { add(it) }
             }
-            // 2) id / data-testid / aria-label / role
+            // 1) id / data-testid / aria-label / role
             listOfNotNull(context.id, context.dataTestid, context.ariaLabel, context.role).forEach { add(slugify(it)) }
 
-            // 3) parent + tag: e.g. "formContainer" -> "formContainerButton"
+            // 2) parent + tag: e.g. "formContainer" -> "formContainerButton"
             if (!context.parentClassName.isNullOrBlank()) {
                 for (seg in splitClassNames(context.parentClassName)) {
                     add(seg + capitalize(context.jsxTag))
@@ -42,14 +44,14 @@ object ClassNameInferencer {
                 }
             }
 
-            // 4) jsx tag alone
+            // 3) jsx tag alone
             add(context.jsxTag)
 
-            // 5) style-property driven names
+            // 4) style-property driven names
             val styleBased = styleBasedNames(context.styleProps)
             addAll(styleBased)
 
-            // 6) sibling based patterns: if sibling has "cardHeader", suggest "cardBody" etc.
+            // 5) sibling based patterns: if sibling has "cardHeader", suggest "cardBody" etc.
             context.siblingClassNames.forEach { sib ->
                 for (seg in splitClassNames(sib)) {
                     val variant = inferVariant(seg)

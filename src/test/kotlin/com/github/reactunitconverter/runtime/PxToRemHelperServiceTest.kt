@@ -33,7 +33,7 @@ class PxToRemHelperServiceTest {
     fun `relative spec import builder for sibling file`() {
         // simulate PxToRemHelperService.relativeImportSpec behaviour (VfsUtil path-based)
         assertEquals("./Foo.module.css", relativeSpecSimulation("src/components", "src/components/Foo.module.css"))
-        assertEquals("../utils/rem", relativeSpecSimulation("src/components/Sub", "src/utils/rem.ts"))
+        assertEquals("../../utils/rem", relativeSpecSimulation("src/components/Sub", "src/utils/rem.ts"))
     }
 
     // Mini simulation of VfsUtil.findRelativePath behaviour for our happy path cases.

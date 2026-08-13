@@ -139,11 +139,12 @@ object InlineStyleExtractor {
         // plain numeric literal
         val num = v.toDoubleOrNull()
         if (num != null) {
+            val isIntegral = num == num.toInt().toDouble()
             if (cssProp in NON_PIXEL_CSS_PROPS) {
-                return if (cssProp in INTEGER_PROPS) num.toInt().toString() else num.toString()
+                return if (cssProp in INTEGER_PROPS || isIntegral) num.toInt().toString() else num.toString()
             }
             // React treats numeric N as Npx for layout properties
-            val asInt = if (num == num.toInt().toDouble()) num.toInt().toString() else num.toString()
+            val asInt = if (isIntegral) num.toInt().toString() else num.toString()
             return "${asInt}px"
         }
 

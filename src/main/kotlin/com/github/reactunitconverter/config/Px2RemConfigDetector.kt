@@ -212,12 +212,12 @@ class Px2RemConfigDetector(
             //  require('name')({ ... })
             //  name: { ... }
             val callRegex = Regex(
-                """(?:require\s*\(\s*['"]${Regex.escape(name)}['"]\s*\)|${Regex.escape(name)})\s*\(\s*(\{""",
+                "(?:require\\s*\\(\\s*['\"]${Regex.escape(name)}['\"]\\s*\\)|${Regex.escape(name)})\\s*\\(\\s*\\{",
                 RegexOption.IGNORE_CASE
             )
             val m = callRegex.find(cleaned)
             if (m != null) {
-                val start = m.range.last - 1 // index of '{'
+                val start = m.range.last  // last char of matched group = '{'
                 val end = matchBalancedBraces(cleaned, start)
                 if (end != -1) {
                     val block = cleaned.substring(start, end + 1)
@@ -226,7 +226,7 @@ class Px2RemConfigDetector(
                 }
             }
             // Object field form:  { ..., name: { ... } }
-            val fieldRegex = Regex("""['"]?${Regex.escape(name)}['"]?\s*:\s*\{""")
+            val fieldRegex = Regex("['\"]?${Regex.escape(name)}['\"]?\\s*:\\s*\\{")
             val mf = fieldRegex.find(cleaned)
             if (mf != null) {
                 val start = mf.range.last
@@ -252,7 +252,8 @@ class Px2RemConfigDetector(
                 depth--
                 if (depth == 0) return i
             } else if (c == '"' || c == '\'' || c == '`') {
-                i = skipString(s, i)
+                val end = skipString(s, i)
+                i = if (end == -1) s.length else end + 1
                 continue
             }
             i++
@@ -398,32 +399,52 @@ class Px2RemConfigDetector(
         return s.length - 1
     }
 
+    @Suppress("UNCHECKED_CAST")
     private fun JsonObject.asStringMap(): Map<String, Any?> {
-        val out = LinkedHashMap<String, Any?>()
-        for ((k, v) in entrySet()) out[k] = jsonElementToAny(v)
+        val out = LinkedHashMap<String, Any?>(this.size())
+        for ((k, v) in this.entrySet()) out[k] = jsonElementToAny(v)
         return out
     }
 
+    @Suppress("UNCHECKED_CAST")
     private fun Map<*, *>.asStringMap(): Map<String, Any?> {
-        val out = LinkedHashMap<String, Any?>()
-        for ((k, v) in this) out[k.toString()] = v
+        val out = LinkedHashMap<String, Any?>(this.size)
+        for ((k, v) in this) {
+            val key = k?.toString() ?: continue
+            out[key] = when (v) {
+                is JsonElement -> jsonElementToAny(v)
+                is Map<*, *> -> (v as Map<Any?, Any?>).asStringMap()
+                is List<*> -> v.map { if (it is Map<*, *>) (it as Map<Any?, Any?>).asStringMap() else it?.toString() }
+                is Array<*> -> v.map { if (it is Map<*, *>) (it as Map<Any?, Any?>).asStringMap() else it?.toString() }
+                else -> v
+            }
+        }
         return out
     }
 
     private fun jsonElementToAny(el: JsonElement?): Any? = when {
         el == null || el.isJsonNull -> null
+        el.isJsonObject -> el.asJsonObject.asStringMap()
+        el.isJsonArray -> el.asJsonArray.map { jsonElementToAny(it) }
         el.isJsonPrimitive -> {
             val p = el.asJsonPrimitive
             when {
                 p.isBoolean -> p.asBoolean
-                p.isNumber -> p.asNumber.let { if (it.toDouble() == it.toLong().toDouble()) it.toLong() else it.toDouble() }
+                p.isNumber -> {
+                    val n = p.asNumber
+                    when {
+                        n.toString().contains('.') || p.toString().contains("e") || p.toString().contains("E") -> n.toDouble()
+                        else -> n.toInt()
+                    }
+                }
                 else -> p.asString
             }
         }
-        el.isJsonArray -> el.asJsonArray.mapTo(ArrayList()) { jsonElementToAny(it) }
-        el.isJsonObject -> el.asJsonObject.asStringMap()
-        else -> null
+        else -> el.toString()
     }
+
+    private fun rawMapToConfig(map: Map<String, Any?>, source: String, cssLevelPluginEnabled: Boolean): Px2RemConfig =
+        RawOpts.from(map).toConfig(source = source, cssLevelPluginEnabled = cssLevelPluginEnabled)
 
     data class RawOpts(
         val unitToConvert: String? = null,
@@ -458,6 +479,7 @@ class Px2RemConfigDetector(
         )
 
         companion object {
+            @JvmStatic
             fun from(map: Map<String, Any?>): RawOpts = RawOpts(
                 unitToConvert = map.str("unitToConvert") ?: map.str("unit"),
                 rootValue = map.dbl("rootValue") ?: map.dbl("root_value"),
@@ -471,43 +493,48 @@ class Px2RemConfigDetector(
                 replace = map.bool("replace"),
                 exclude = map.listStr("exclude")
             )
+
+            private fun Map<String, Any?>.str(k: String): String? =
+                (this[k] as? String)?.takeIf { it.isNotBlank() }
+
+            private fun Map<String, Any?>.dbl(k: String): Double? = when (val v = this[k]) {
+                is Number -> v.toDouble()
+                is String -> v.toDoubleOrNull()
+                else -> null
+            }
+
+            private fun Map<String, Any?>.int(k: String): Int? = when (val v = this[k]) {
+                is Number -> v.toInt()
+                is String -> v.toIntOrNull()
+                else -> null
+            }
+
+            private fun Map<String, Any?>.bool(k: String): Boolean? = when (val v = this[k]) {
+                is Boolean -> v
+                is String -> v.toBooleanStrictOrNull()
+                else -> null
+            }
+
+            @Suppress("UNCHECKED_CAST")
+            private fun Map<String, Any?>.listStr(k: String): List<String>? {
+                val v = this[k] ?: return null
+                if (v is List<*>) return v.mapNotNull { it?.toString()?.takeIf { s -> s.isNotBlank() } }
+                if (v is Array<*>) return v.mapNotNull { it?.toString()?.takeIf { s -> s.isNotBlank() } }
+                if (v is String) return listOf(v)
+                return null
+            }
         }
     }
 
-    private fun Map<String, Any?>.str(k: String): String? = (this[k] as? String)?.takeIf { it.isNotBlank() }
-    private fun Map<String, Any?>.dbl(k: String): Double? = when (val v = this[k]) {
-        is Number -> v.toDouble()
-        is String -> v.toDoubleOrNull()
-        else -> null
-    }
-    private fun Map<String, Any?>.int(k: String): Int? = when (val v = this[k]) {
-        is Number -> v.toInt()
-        is String -> v.toIntOrNull()
-        else -> null
-    }
-    private fun Map<String, Any?>.bool(k: String): Boolean? = when (val v = this[k]) {
-        is Boolean -> v
-        is String -> v.toBooleanStrictOrNull()
-        else -> null
-    }
-    @Suppress("UNCHECKED_CAST")
-    private fun Map<String, Any?>.listStr(k: String): List<String>? {
-        val v = this[k] ?: return null
-        if (v is List<*>) return v.mapNotNull { it?.toString()?.takeIf { s -> s.isNotBlank() } }
-        if (v is String) return listOf(v)
-        if (v is Array<*>) return v.mapNotNull { it?.toString()?.takeIf { s -> s.isNotBlank() } }
-        return null
-    }
-
     private fun Px2RemConfig.mergeOverwriteDefaults(other: Px2RemConfig): Px2RemConfig = copy(
-        unitToConvert = if (other.unitToConvert != DEFAULT.unitToConvert) other.unitToConvert else this.unitToConvert,
-        rootValue = if (other.rootValue != DEFAULT.rootValue) other.rootValue else this.rootValue,
-        unitPrecision = if (other.unitPrecision != DEFAULT.unitPrecision) other.unitPrecision else this.unitPrecision,
-        propList = if (other.propList != DEFAULT.propList) other.propList else this.propList,
-        minPixelValue = if (other.minPixelValue != DEFAULT.minPixelValue) other.minPixelValue else this.minPixelValue,
+        unitToConvert = if (other.unitToConvert != Px2RemConfig.DEFAULT.unitToConvert) other.unitToConvert else this.unitToConvert,
+        rootValue = if (other.rootValue != Px2RemConfig.DEFAULT.rootValue) other.rootValue else this.rootValue,
+        unitPrecision = if (other.unitPrecision != Px2RemConfig.DEFAULT.unitPrecision) other.unitPrecision else this.unitPrecision,
+        propList = if (other.propList != Px2RemConfig.DEFAULT.propList) other.propList else this.propList,
+        minPixelValue = if (other.minPixelValue != Px2RemConfig.DEFAULT.minPixelValue) other.minPixelValue else this.minPixelValue,
         mediaQuery = this.mediaQuery || other.mediaQuery,
-        viewportWidth = if (other.viewportWidth != DEFAULT.viewportWidth) other.viewportWidth else this.viewportWidth,
-        viewportHeight = if (other.viewportHeight != DEFAULT.viewportHeight) other.viewportHeight else this.viewportHeight,
+        viewportWidth = if (other.viewportWidth != Px2RemConfig.DEFAULT.viewportWidth) other.viewportWidth else this.viewportWidth,
+        viewportHeight = if (other.viewportHeight != Px2RemConfig.DEFAULT.viewportHeight) other.viewportHeight else this.viewportHeight,
         selectorBlackList = (this.selectorBlackList + other.selectorBlackList).distinct(),
         replace = this.replace && other.replace,
         exclude = (this.exclude + other.exclude).distinct(),
