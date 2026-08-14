@@ -32,11 +32,7 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
-          gradle-version: 8.14.5
           cache-write-only: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
-
-      - name: Generate Gradle Wrapper
-        run: gradle --init-script _local_init.gradle.kts wrapper --gradle-version 8.14.5
 
       - name: Gradle Wrapper validation
         uses: gradle/actions/wrapper-validation@v6
