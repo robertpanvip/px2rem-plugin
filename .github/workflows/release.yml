@@ -49,7 +49,10 @@ jobs:
           fi
 
       - name: Build plugin distribution
-        run: ./gradlew --init-script _local_init.gradle.kts buildPlugin --no-daemon
+        # Disable :buildSearchableOptions on a headless Linux CI runner: that task boots a
+        # full IntelliJ sandbox and instantiates every declared <action>/EP to build the
+        # SearchableOptions index, which is brittle in CI and not required for a release zip.
+        run: ./gradlew --init-script _local_init.gradle.kts buildPlugin --no-daemon -x buildSearchableOptions
 
       - name: Sign plugin (if signing secrets provided)
         if: env.CERTIFICATE_CHAIN != '' && env.PRIVATE_KEY != ''

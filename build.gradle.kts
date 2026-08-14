@@ -48,6 +48,17 @@ tasks {
         }
     }
 
+    // buildSearchableOptions boots a full headless IntelliJ sandbox and instantiates every
+    // declared <action>/EP to build the Help → Find Action index. It is brittle in CI
+    // (JCEF disabled, sandboxed classloading, X11 missing in Linux runners) and does not
+    // affect the plugin zip itself. Skip by default when CI or GITHUB_ACTIONS env is set;
+    // release workflow additionally passes `-x buildSearchableOptions` to be explicit.
+    named("buildSearchableOptions") {
+        onlyIf("not running in CI") {
+            System.getenv("CI") == null && System.getenv("GITHUB_ACTIONS") == null
+        }
+    }
+
     wrapper {
         gradleVersion = properties("gradleVersion")
     }
