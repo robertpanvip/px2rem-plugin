@@ -3,8 +3,8 @@ package com.github.reactunitconverter.analyzer
 import com.intellij.lang.javascript.psi.*
 import com.intellij.lang.javascript.psi.ecma6.TypeScriptVariable
 import com.intellij.psi.PsiElement
-import com.intellij.psi.ResolveResult
 import com.intellij.psi.util.PsiTreeUtil
+import com.intellij.psi.xml.XmlAttribute
 
 /**
  * Tries to answer: "Is this expression that I'm about to wrap with pxToRem(...) actually
@@ -65,7 +65,7 @@ object ReactCssPropertyTracker {
             is JSObjectLiteralExpression ->
                 Verdict(Verdict.Kind.CSS_PROPERTIES_OBJECT, "nested object literal", expr)
             is JSAssignmentExpression ->
-                analyzeExpression(expr.expression, contextProp).let { it.copy(reason = "assignment rhs: ${it.reason}") }
+                analyzeExpression(expr.rOperand, contextProp).let { it.copy(reason = "assignment rhs: ${it.reason}") }
             is JSParenthesizedExpression ->
                 analyzeExpression(expr.innerExpression, contextProp)
             else -> Verdict(Verdict.Kind.UNKNOWN, "unsupported expression ${expr.node.elementType}", expr)
@@ -86,8 +86,7 @@ object ReactCssPropertyTracker {
 
     // ---- Reference ----
     private fun analyzeReference(ref: JSReferenceExpression, contextProp: String?): Verdict {
-        val resolve = runCatching { ref.advancedResolve(true) }.getOrNull()
-        val target = (resolve as? ResolveResult?)?.element ?: ref.resolve()
+        val target = ref.resolve()
         if (target == null) {
             // Unknown reference but the context prop is pixel-bearing → assume it's px
             return if (contextProp != null && !isNonPixelPropName(contextProp))
@@ -164,8 +163,11 @@ object ReactCssPropertyTracker {
 
     // ---- Call ----
     private fun analyzeCall(call: JSCallExpression, contextProp: String?): Verdict {
-        val resolved = (runCatching { call.advancedResolve(true) }.getOrNull() as? ResolveResult?)?.element
-                ?: call.resolve()
+        val methodExpr = call.methodExpression
+        val resolved = (methodExpr as? com.intellij.psi.PsiReference)?.resolve()
+            ?: (methodExpr as? JSReferenceExpression)?.let { ref ->
+                (ref as? com.intellij.psi.PsiPolyVariantReference)?.multiResolve(false)?.firstOrNull()?.element
+            }
         if (resolved is JSFunction) return analyzeFunction(resolved, contextProp, callSite = call)
         // Without resolved target we still trust prop context
         return if (contextProp != null && !isNonPixelPropName(contextProp))
@@ -185,20 +187,24 @@ object ReactCssPropertyTracker {
                 return Verdict(Verdict.Kind.PIXEL_NUMBER, "number return in pixel-style context", fn)
         }
         // Look at body: either `{ return X }` OR arrow `=> X`
-        val returned = when (val body = fn.body) {
-            is JSBlockStatement -> body.statements.lastOrNull { it is JSReturnStatement }
-                ?.let { (it as JSReturnStatement).expression }
-            is JSExpression -> body
-            else -> null
-        } ?: return Verdict(Verdict.Kind.UNKNOWN, "function with no body/return", fn)
+        val block = fn.block
+        val returned: JSExpression? = when {
+            block != null -> {
+                val lastReturn = block.statements.lastOrNull { it is JSReturnStatement } as? JSReturnStatement
+                lastReturn?.expression
+            }
+            // shorthand arrow: (x) => expr has no block, treat function's first child expression as body
+            else -> fn.children.filterIsInstance<JSExpression>().firstOrNull()
+        }
+        if (returned == null) return Verdict(Verdict.Kind.UNKNOWN, "function with no body/return", fn)
         return analyzeExpression(returned, contextProp).copy(referencedDefinition = fn)
     }
 
     // ---- Binary ----
     private fun analyzeBinary(expr: JSBinaryExpression, contextProp: String?): Verdict {
-        val op = expr.operationSign.text.trim()
-        val left = expr.leftOperand
-        val right = expr.rightOperand
+        val op = expr.operationNode?.text?.trim() ?: "?"
+        val left = expr.lOperand
+        val right = expr.rOperand
         return when (op) {
             "+", "-", "*", "/" -> {
                 // Arithmetic → pixel number (if prop context allows)
@@ -221,8 +227,10 @@ object ReactCssPropertyTracker {
 
     // ---- Ternary ----
     private fun analyzeTernary(expr: JSConditionalExpression, contextProp: String?): Verdict {
-        val thenV = analyzeExpression(expr.then, contextProp)
-        val elseV = analyzeExpression(expr.`else`, contextProp)
+        val thenBranch = expr.thenBranch
+        val elseBranch = expr.elseBranch
+        val thenV = analyzeExpression(thenBranch, contextProp)
+        val elseV = analyzeExpression(elseBranch, contextProp)
         // If both agree, take it; if either is style-ish, assume value (conservative).
         if (thenV.kind == Verdict.Kind.CSS_PROPERTIES_OBJECT && elseV.kind == Verdict.Kind.CSS_PROPERTIES_OBJECT)
             return Verdict(Verdict.Kind.CSS_PROPERTIES_OBJECT, "ternary → both branches are CSSProperties", expr)
@@ -298,12 +306,12 @@ object ReactCssPropertyTracker {
                 p == "fontweight" || p == "opacity" || p == "order"
     }
 
-    /** Resolve helpers that work on JSXAttribute / JSXAttributeValue style references. */
-    fun analyzeStyleObject(attr: com.intellij.lang.javascript.psi.JSXAttribute): Verdict {
-        val value = attr.value as? JSExpression ?: return Verdict(Verdict.Kind.UNKNOWN, "no value")
+    /** Resolve helpers that work on XmlAttribute / attribute value style references. */
+    fun analyzeStyleObject(attr: XmlAttribute): Verdict {
+        val value = attr.valueElement ?: return Verdict(Verdict.Kind.UNKNOWN, "no value")
         val inner = PsiTreeUtil.findChildOfType(value, JSObjectLiteralExpression::class.java)
         if (inner != null && isStyleLikeObject(inner))
             return Verdict(Verdict.Kind.CSS_PROPERTIES_OBJECT, "direct style object literal", inner)
-        return analyzeExpression(value, "style")
+        return analyzeExpression(value as? JSExpression, "style")
     }
 }

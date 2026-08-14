@@ -36,16 +36,16 @@ jobs:
           cache-write-only: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
 
       - name: Generate Gradle Wrapper
-        run: gradle wrapper --gradle-version 8.14.5
+        run: gradle --init-script _local_init.gradle.kts wrapper --gradle-version 8.14.5
 
       - name: Gradle Wrapper validation
         uses: gradle/actions/wrapper-validation@v6
 
       - name: Run tests
-        run: ./gradlew test --no-daemon
+        run: ./gradlew --init-script _local_init.gradle.kts test --no-daemon
 
       - name: Build plugin (verify distribution assembles)
-        run: ./gradlew buildPlugin --no-daemon
+        run: ./gradlew --init-script _local_init.gradle.kts buildPlugin --no-daemon
 
       - name: Upload test report (on failure)
         if: failure()

@@ -6,7 +6,7 @@ fun properties(key: String) = project.findProperty(key).toString()
 plugins {
     id("java")
     id("org.jetbrains.kotlin.jvm") version "1.9.10"
-    id("org.jetbrains.intellij") version "1.16.0"
+    id("org.jetbrains.intellij") version "1.17.1"
     id("org.jetbrains.changelog") version "2.2.0"
 }
 
@@ -14,10 +14,9 @@ group = properties("pluginGroup")
 version = properties("pluginVersion")
 
 repositories {
-    maven { url = uri("https://maven.aliyun.com/repository/public") }
-    maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
-    maven { url = uri("https://maven.aliyun.com/repository/jetbrains") }
+    // 真实 URL 会由 _local_init.gradle.kts 在 afterEvaluate 阶段替换为腾讯云镜像 + 追加 JetBrains releases/snapshots
     mavenCentral()
+    gradlePluginPortal()
 }
 
 intellij {

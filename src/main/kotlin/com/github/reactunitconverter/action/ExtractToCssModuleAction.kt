@@ -9,9 +9,6 @@ import com.intellij.lang.javascript.psi.JSFile
 import com.intellij.lang.javascript.psi.JSLiteralExpression
 import com.intellij.lang.javascript.psi.JSObjectLiteralExpression
 import com.intellij.lang.javascript.psi.JSProperty
-import com.intellij.lang.javascript.psi.JSXAttribute
-import com.intellij.lang.javascript.psi.JSXElement
-import com.intellij.lang.javascript.psi.JSXTag
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.editor.Editor
@@ -22,9 +19,14 @@ import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiManager
 import com.intellij.psi.codeStyle.CodeStyleManager
+import com.intellij.psi.util.PsiTreeUtil
+import com.intellij.psi.xml.XmlAttribute
+import com.intellij.psi.xml.XmlElement
+import com.intellij.psi.xml.XmlTag
 import com.intellij.util.IncorrectOperationException
 import java.io.File
 
@@ -63,7 +65,7 @@ class ExtractToCssModuleAction : BaseIntentionAction() {
             Messages.showErrorDialog(project, "Please position the caret inside a `style={{...}}` attribute.", "Extract to CSS Module")
             return
         }
-        val tag = parentOfType<JSXTag>(attr)
+        val tag = parentOfType<XmlTag>(attr)
         val (styleText, _) = ConvertInlineStyleAction.extractStyleObjectText(attr) ?: run {
             Messages.showErrorDialog(project, "Cannot parse inline style object.", "Extract to CSS Module")
             return
@@ -116,7 +118,7 @@ class ExtractToCssModuleAction : BaseIntentionAction() {
 
             // 4) Format
             PsiManager.getInstance(project).reloadFromDisk(file)
-            CodeStyleManager.getInstance(project).reformatText(file, listOf(attrRange.startOffset to attrRange.endOffset))
+            CodeStyleManager.getInstance(project).reformatText(file, listOf(attrRange))
         }
 
         // Open CSS module editor so user can verify
@@ -131,8 +133,8 @@ class ExtractToCssModuleAction : BaseIntentionAction() {
 
     // ---- helpers ----
 
-    private fun <T : com.intellij.psi.PsiElement> parentOfType(e: com.intellij.psi.PsiElement?, cls: Class<T>): T? {
-        var cur: com.intellij.psi.PsiElement? = e
+    private fun <T : PsiElement> parentOfType(e: PsiElement?, cls: Class<T>): T? {
+        var cur: PsiElement? = e
         while (cur != null) {
             if (cls.isInstance(cur)) return cls.cast(cur)
             cur = cur.parent
@@ -140,40 +142,45 @@ class ExtractToCssModuleAction : BaseIntentionAction() {
         return null
     }
 
-    private inline fun <reified T : com.intellij.psi.PsiElement> parentOfType(e: com.intellij.psi.PsiElement?): T? =
+    private inline fun <reified T : PsiElement> parentOfType(e: PsiElement?): T? =
         parentOfType(e, T::class.java)
 
-    private fun findEnclosingStyleAttr(leaf: com.intellij.psi.PsiElement): JSXAttribute? {
-        var cur: com.intellij.psi.PsiElement? = leaf
+    private fun findEnclosingStyleAttr(leaf: PsiElement): XmlAttribute? {
+        var cur: PsiElement? = leaf
         while (cur != null) {
-            if (cur is JSXAttribute) {
+            if (cur is XmlAttribute) {
                 val name = cur.name?.trim()
                 if (name.equals("style", ignoreCase = true) || name?.endsWith("Style") == true) return cur
             }
-            if (cur is JSXElement || cur is JSFile) return null
+            if (cur is XmlElement || cur is JSFile) return null
             cur = cur.parent
         }
         return null
     }
 
-    private fun findLiteralAttr(tag: JSXTag?, attrName: String): String? {
+    private fun findLiteralAttr(tag: XmlTag?, attrName: String): String? {
         if (tag == null) return null
-        val attr = tag.attributes.firstOrNull { it.name == attrName } as? JSXAttribute ?: return null
-        val value = attr.value as? JSLiteralExpression ?: return null
-        val str = value.stringValue ?: value.value as? String ?: return null
-        return str
+        val attr = tag.getAttribute(attrName) ?: return null
+        val valueEl = attr.valueElement ?: return null
+        val strValue = attr.value
+        if (strValue != null && strValue.isNotEmpty()) return strValue
+        // fallback: look inside the value element for a JS literal
+        val lit = PsiTreeUtil.findChildOfType(valueEl, JSLiteralExpression::class.java)
+        val v = lit?.value
+        if (v is String) return v
+        return null
     }
 
-    private fun findParentClassName(tag: JSXTag?): String? {
-        val parentTag = parentOfType<JSXTag>(tag?.parent) ?: return null
+    private fun findParentClassName(tag: XmlTag?): String? {
+        val parentTag = parentOfType<XmlTag>(tag?.parent) ?: return null
         return findLiteralAttr(parentTag, "className")
     }
 
-    private fun findSiblingClassNames(tag: JSXTag?): List<String> {
+    private fun findSiblingClassNames(tag: XmlTag?): List<String> {
         if (tag == null) return emptyList()
         val parent = tag.parent ?: return emptyList()
         return parent.children.mapNotNull { child ->
-            if (child is JSXTag && child !== tag) findLiteralAttr(child, "className") else null
+            if (child is XmlTag && child !== tag) findLiteralAttr(child, "className") else null
         }
     }
 
@@ -208,7 +215,7 @@ class ExtractToCssModuleAction : BaseIntentionAction() {
             "Create", "Choose existing...", "Cancel",
             Messages.getQuestionIcon()
         )
-        if (choice == Messages.CANCEL || choice == Messages.CLOSED_OPTION) return null to false
+        if (choice == Messages.CANCEL) return null to false
         if (choice == Messages.NO) {
             // pick an existing .module.css file from project
             val jfc = com.intellij.openapi.fileChooser.FileChooser.chooseFile(
