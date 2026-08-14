@@ -35,21 +35,32 @@
         <localInspection language="JavaScript" displayName="React inline style px should convert"
                          groupName="React" enabledByDefault="true" level="WEAK WARNING"
                          implementationClass="com.github.reactunitconverter.inspection.PxInlineStyleInspection" />
+        <!--
+          These two actions implement BaseIntentionAction (not AnAction) — they show up in the
+          Alt+Enter / Show Context Actions menu rather than the IDE's main action system.
+          Registering them under <actions>/<action> caused :buildSearchableOptions (which
+          instantiates every declared <action> in a headless IDE sandbox) to throw
+          "must be an instance of com.intellij.openapi.actionSystem.AnAction" → exit 255.
+          Using <intentionAction> EP here matches the actual class hierarchy and still lets
+          users invoke them via intention menus.
+        -->
+        <intentionAction>
+            <className>com.github.reactunitconverter.action.ConvertInlineStyleAction</className>
+            <language>JavaScript</language>
+            <category>React</category>
+        </intentionAction>
+        <intentionAction>
+            <className>com.github.reactunitconverter.action.ExtractToCssModuleAction</className>
+            <language>JavaScript</language>
+            <category>React</category>
+        </intentionAction>
     </extensions>
 
     <actions>
         <group id="ReactUnitConverter.Group" text="React Unit Converter" description="React inline style unit converter" popup="true">
             <add-to-group group-id="CodeMenu" anchor="last" />
             <add-to-group group-id="EditorPopupMenu" anchor="last" />
-            <action id="ReactUnitConverter.ConvertInlineStyle"
-                    class="com.github.reactunitconverter.action.ConvertInlineStyleAction"
-                    text="Convert px in inline styles"
-                    description="Convert px numeric values in React inline styles to rem/vw based on project px2rem config" />
-            <action id="ReactUnitConverter.ExtractToCssModule"
-                    class="com.github.reactunitconverter.action.ExtractToCssModuleAction"
-                    text="Extract inline style to CSS Module"
-                    description="Extract React inline style object to a CSS Module class with semantic class name" />
-            <separator />
+            <!-- SettingsAction IS an AnAction subclass, so it belongs here. -->
             <action id="ReactUnitConverter.Settings"
                     class="com.github.reactunitconverter.action.SettingsAction"
                     text="Settings..."
