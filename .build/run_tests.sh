@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-export JAVA_HOME=/tmp/jdk17/jdk-17.0.20+8
+export JAVA_HOME=/root/.local/share/mise/installs/java/17.0.2
 export PATH="$JAVA_HOME/bin:$PATH"
 
 LIB=/tmp/build/lib
