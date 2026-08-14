@@ -1,0 +1,75 @@
+<idea-plugin>
+    <id>com.github.reactunitconverter</id>
+    <name>React Unit Converter (px2rem/vw)</name>
+    <version>1.0.0</version>
+    <vendor email="support@example.com" url="https://github.com/reactunitconverter/plugin">React Unit Converter Team</vendor>
+
+    <description><![CDATA[
+        <p>A JetBrains IDE plugin for converting px to rem/vw in React inline styles.
+        Reads existing px2rem configurations from Vite/Rsbuild projects, skips CSS
+        conversion when PostCSS pxtorem is detected, and handles only React.CSSProperties
+        inline styles safely.</p>
+        <p>Also supports extracting inline styles into CSS Modules with semantic class
+        name inference and an interactive rename dialog.</p>
+    ]]></description>
+
+    <change-notes><![CDATA[
+        <p>Initial release:</p>
+        <ul>
+            <li>Read px2rem / postcss-pxtorem configs from Vite (vite.config.*) and Rsbuild</li>
+            <li>Skip CSS files when PostCSS plugin configured (honor rootValue / unitPrecision / propList / minPixelValue)</li>
+            <li>Convert React inline style px -> rem / vw in .tsx / .jsx files</li>
+            <li>Extract inline styles into CSS Module with semantic class name guess</li>
+            <li>Interactive rename dialog for the generated class</li>
+        </ul>
+    ]]></change-notes>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.lang</depends>
+    <depends>JavaScript</depends>
+    <depends>com.intellij.css</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <completion.contributor language="JavaScript"
+                                implementationClass="com.github.reactunitconverter.completion.UnitCompletionContributor" />
+        <localInspection language="JavaScript" displayName="React inline style px should convert"
+                         groupName="React" enabledByDefault="true" level="WEAK WARNING"
+                         implementationClass="com.github.reactunitconverter.inspection.PxInlineStyleInspection" />
+    </extensions>
+
+    <actions>
+        <group id="ReactUnitConverter.Group" text="React Unit Converter" description="React inline style unit converter" popup="true">
+            <add-to-group group-id="CodeMenu" anchor="last" />
+            <add-to-group group-id="EditorPopupMenu" anchor="last" />
+            <action id="ReactUnitConverter.ConvertInlineStyle"
+                    class="com.github.reactunitconverter.action.ConvertInlineStyleAction"
+                    text="Convert px in inline styles"
+                    description="Convert px numeric values in React inline styles to rem/vw based on project px2rem config" />
+            <action id="ReactUnitConverter.ExtractToCssModule"
+                    class="com.github.reactunitconverter.action.ExtractToCssModuleAction"
+                    text="Extract inline style to CSS Module"
+                    description="Extract React inline style object to a CSS Module class with semantic class name" />
+            <separator />
+            <action id="ReactUnitConverter.Settings"
+                    class="com.github.reactunitconverter.action.SettingsAction"
+                    text="Settings..."
+                    description="Open React Unit Converter settings" />
+        </group>
+    </actions>
+
+    <applicationConfigurable parentId="tools" instance="com.github.reactunitconverter.settings.AppSettingsConfigurable"
+                              id="com.github.reactunitconverter.settings.AppSettingsConfigurable"
+                              displayName="React Unit Converter" />
+
+    <projectConfigurable parentId="tools" instance="com.github.reactunitconverter.settings.ProjectSettingsConfigurable"
+                         id="com.github.reactunitconverter.settings.ProjectSettingsConfigurable"
+                         displayName="React Unit Converter Project" />
+
+    <projectService serviceImplementation="com.github.reactunitconverter.service.ProjectConfigService" />
+
+    <applicationService serviceImplementation="com.github.reactunitconverter.service.AppSettingsService" />
+
+    <extensions defaultExtensionNs="com.intellij">
+        <projectOpenProcessor implementation="com.github.reactunitconverter.startup.AutoDetectConfigStartup" order="first" />
+    </extensions>
+</idea-plugin>
