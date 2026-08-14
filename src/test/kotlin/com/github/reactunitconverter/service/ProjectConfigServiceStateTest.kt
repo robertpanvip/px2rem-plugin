@@ -64,4 +64,77 @@ class ProjectConfigServiceStateTest {
         assertEquals(720.0, cfg.viewportWidth)
         assertEquals(1280.0, cfg.viewportHeight)
     }
+
+    // Bug #6: a project with NO auto-detection ("default") and NO override must fall back
+    // to the app-level global defaults instead of the hardcoded project ones.
+    @Test
+    fun `no detection uses app level global defaults`() {
+        val cfg = ProjectConfigState(
+            detectedSource = "default",
+            overridden = false,
+            unitToConvert = "rem",
+            rootValue = 16.0,
+            unitPrecision = 5,
+            minPixelValue = 0.0,
+            viewportWidth = 750.0,
+            // app-level defaults (from Settings → React Unit Converter)
+            appDefaultUnitToConvert = "vw",
+            appDefaultRootValue = 75.0,
+            appDefaultUnitPrecision = 2,
+            appDefaultViewportWidth = 375.0,
+            appDefaultMinPixelValue = 2.0,
+        ).toConfig()
+        assertEquals("vw", cfg.unitToConvert, "app default unit must win when nothing detected")
+        assertEquals(75.0, cfg.rootValue, "app default rootValue must win")
+        assertEquals(2, cfg.unitPrecision, "app default precision must win")
+        assertEquals(375.0, cfg.viewportWidth, "app default viewportWidth must win")
+        assertEquals(2.0, cfg.minPixelValue, "app default minPixelValue must win")
+    }
+
+    @Test
+    fun `detected config overrides app defaults`() {
+        val cfg = ProjectConfigState(
+            detectedSource = "vite.config.ts",
+            overridden = false,
+            unitToConvert = "rem",
+            rootValue = 37.5,
+            unitPrecision = 3,
+            minPixelValue = 1.0,
+            viewportWidth = 750.0,
+            // app defaults set to something else — must NOT win over a real detection
+            appDefaultUnitToConvert = "vw",
+            appDefaultRootValue = 75.0,
+            appDefaultUnitPrecision = 2,
+            appDefaultViewportWidth = 375.0,
+            appDefaultMinPixelValue = 2.0,
+        ).toConfig()
+        assertEquals("rem", cfg.unitToConvert)
+        assertEquals(37.5, cfg.rootValue)
+        assertEquals(3, cfg.unitPrecision)
+        assertEquals(1.0, cfg.minPixelValue)
+        assertEquals(750.0, cfg.viewportWidth)
+    }
+
+    @Test
+    fun `user override wins over app defaults`() {
+        val cfg = ProjectConfigState(
+            overridden = true,
+            detectedSource = "override",
+            unitToConvert = "em",
+            rootValue = 10.0,
+            unitPrecision = 4,
+            minPixelValue = 0.0,
+            viewportWidth = 640.0,
+            appDefaultUnitToConvert = "vw",
+            appDefaultRootValue = 75.0,
+            appDefaultUnitPrecision = 2,
+            appDefaultViewportWidth = 375.0,
+            appDefaultMinPixelValue = 2.0,
+        ).toConfig()
+        assertEquals("em", cfg.unitToConvert)
+        assertEquals(10.0, cfg.rootValue)
+        assertEquals(4, cfg.unitPrecision)
+        assertEquals(0.0, cfg.minPixelValue)
+        assertEquals(640.0, cfg.viewportWidth)
+    }
 }

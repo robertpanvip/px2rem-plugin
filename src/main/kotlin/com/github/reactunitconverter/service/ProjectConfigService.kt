@@ -27,21 +27,35 @@ class ProjectConfigService(val project: Project) : PersistentStateComponent<Proj
         var detectedSource: String = "default",
         var lastDetectedAt: Long = 0L,
     ) {
-        fun toConfig(): Px2RemConfig = Px2RemConfig(
-            source = detectedSource,
-            cssLevelPluginEnabled = cssLevelPluginEnabled,
-            unitToConvert = unitToConvert,
-            rootValue = rootValue,
-            unitPrecision = unitPrecision,
-            propList = propList.split(",").map { it.trim() }.filter { it.isNotEmpty() }.ifEmpty { listOf("*") },
-            minPixelValue = minPixelValue,
-            mediaQuery = false,
-            viewportWidth = viewportWidth,
-            viewportHeight = viewportHeight,
-            selectorBlackList = emptyList(),
-            replace = true,
-            exclude = emptyList(),
-        )
+        fun toConfig(): Px2RemConfig {
+            // Bug #6: with no auto-detection ("default") and no user override, fall back to the
+            // app-level global defaults configured in Settings → React Unit Converter, instead of
+            // the hardcoded project defaults (rem / 16 / 5 / 750 / 0).
+            val useAppDefaults = !overridden && detectedSource == "default"
+            val app = if (useAppDefaults) {
+                try { AppSettingsService.getInstance().state } catch (_: Throwable) { null }
+            } else null
+            val unit = app?.defaultUnitToConvert ?: unitToConvert
+            val root = app?.defaultRootValue ?: rootValue
+            val precision = app?.defaultUnitPrecision ?: unitPrecision
+            val minPx = app?.defaultMinPixelValue ?: minPixelValue
+            val vw = app?.defaultViewportWidth ?: viewportWidth
+            return Px2RemConfig(
+                source = detectedSource,
+                cssLevelPluginEnabled = cssLevelPluginEnabled,
+                unitToConvert = unit,
+                rootValue = root,
+                unitPrecision = precision,
+                propList = propList.split(",").map { it.trim() }.filter { it.isNotEmpty() }.ifEmpty { listOf("*") },
+                minPixelValue = minPx,
+                mediaQuery = false,
+                viewportWidth = vw,
+                viewportHeight = viewportHeight,
+                selectorBlackList = emptyList(),
+                replace = true,
+                exclude = emptyList(),
+            )
+        }
     }
 
     private val state = State()

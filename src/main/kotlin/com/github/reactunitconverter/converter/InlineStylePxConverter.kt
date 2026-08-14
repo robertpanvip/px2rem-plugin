@@ -44,7 +44,7 @@ class InlineStylePxConverter(
     private val effectiveHelperName: String = helperOpts.helperFnName
         ?: when (cfg.unitToConvert) {
             "vw" -> "pxToVw"
-            "vh" -> "pxToVw"  // shared helper, user can rename
+            "vh" -> "pxToVh"
             else -> "pxToRem"
         }
 
@@ -153,12 +153,15 @@ class InlineStylePxConverter(
             val valueSrc = styleBlock.substring(valueRange)
             // Skip values we already converted: pure quoted "Npx" string / pure number literal
             if (isStaticPxStringLiteral(valueSrc) || isBareNumericLiteral(valueSrc)) continue
+            // Skip plain quoted string literals ("flex", "red", "0", "1rem", `calc(...)`) —
+            // these are static CSS values that must NOT be wrapped into the runtime helper.
+            if (isQuotedLiteral(valueSrc)) continue
             // Skip already wrapped helper calls (idempotent: don't wrap wrappers of either unit)
             val head = valueSrc.trimStart()
             if (head.startsWith("pxToRem(") || head.startsWith("pxToVw(") ||
                 head.startsWith("pxToVh(") || head.startsWith("$effectiveHelperName(")) continue
-            // Skip template strings / nested object / arrays (spreads captured in ...x form aren't value props)
-            if (head.startsWith("`") || head.startsWith("{") || head.startsWith("[")) continue
+            // Skip nested object / arrays (spreads captured in ...x form aren't value props)
+            if (head.startsWith("{") || head.startsWith("[")) continue
             // For a logical-and `cond && <styleValue>` or `a || b` we only want to wrap the RHS / both sides
             // if the whole thing becomes the value. For simple safety we wrap the entire expression (user can edit).
             val wrapped = wrapWithHelper(valueSrc)
@@ -176,15 +179,17 @@ class InlineStylePxConverter(
 
     private fun wrapWithHelper(expr: String): String {
         val trimmed = expr.trim()
-        val passViewport = helperOpts.viewportWidthPassed &&
-                (effectiveHelperName == "pxToVw" || cfg.unitToConvert == "vw")
+        val isVw = effectiveHelperName == "pxToVw" || cfg.unitToConvert == "vw"
+        val isVh = effectiveHelperName == "pxToVh" || cfg.unitToConvert == "vh"
+        val passViewport = helperOpts.viewportWidthPassed && (isVw || isVh)
+        val viewport = if (isVh) cfg.viewportHeight else cfg.viewportWidth
         return buildString {
             append(effectiveHelperName)
             append('(')
             append(trimmed)
             if (passViewport) {
                 append(", ")
-                append(cfg.viewportWidth.let { if (it == it.toLong().toDouble()) it.toLong().toString() else it.toString() })
+                append(viewport.let { if (it == it.toLong().toDouble()) it.toLong().toString() else it.toString() })
             }
             append(')')
         }
@@ -202,6 +207,14 @@ class InlineStylePxConverter(
     }
 
     private fun isBareNumericLiteral(valueSrc: String): Boolean = valueSrc.trim().toDoubleOrNull() != null
+
+    /** True when the value is a plain quoted string literal (single/double/backtick). */
+    private fun isQuotedLiteral(valueSrc: String): Boolean {
+        val s = valueSrc.trim()
+        if (s.length < 2) return false
+        val q = s.first()
+        return (q == '"' || q == '\'' || q == '`') && s.last() == q
+    }
 
     /** Return a list of entry (start..end) ranges (absolute indices in styleBlock). */
     private fun splitStyleEntryRanges(source: String): List<IntRange> {
@@ -383,10 +396,45 @@ class InlineStylePxConverter(
             "columnSpan", "rowSpan"
         )
 
+        /**
+         * React CSS properties whose values are strings / keywords (never px lengths), e.g.
+         * `display: "flex"`, `color: theme.color`. Stored normalized (lowercase, dashes removed);
+         * matches both camelCase and kebab-case spellings.
+         */
+        private val STRING_VALUED_PROPS = setOf(
+            "display", "position", "color", "cursor", "visibility",
+            "overflow", "overflowx", "overflowy", "whitespace", "linebreak",
+            "textalign", "textalignlast", "textjustify", "texttransform", "textdecoration",
+            "textdecorationline", "textdecorationstyle", "textdecorationskipink",
+            "textoverflow", "textorientation", "textsizeadjust", "textunderlineposition",
+            "fontstyle", "fontvariant", "fontfamily", "fontstretch", "fontkerning",
+            "fontfeaturesettings", "fontvariationsettings", "fontsynthesis",
+            "fontvariantcaps", "fontvariantnumeric", "fontvariantligatures", "fontvarianteastasian",
+            "fontopticalsizing", "boxsizing", "float", "clear", "pointerevents", "userselect",
+            "resize", "liststyle", "liststyletype", "liststyleposition", "liststyleimage",
+            "objectfit", "backgroundattachment", "backgroundclip", "backgroundorigin",
+            "backgroundrepeat", "backgroundblendmode", "mixblendmode", "isolation",
+            "borderstyle", "bordertopstyle", "borderrightstyle", "borderbottomstyle",
+            "borderleftstyle", "bordercollapse", "outlinestyle",
+            "flexdirection", "flexwrap", "flexflow", "justifycontent",
+            "alignitems", "alignself", "aligncontent", "direction", "writingmode",
+            "overflowwrap", "wordbreak", "wordwrap", "fill", "stroke", "fillrule", "cliprule",
+            "shaperendering", "textrendering", "colorrendering", "imagerendering",
+            "captionside", "emptycells", "tablelayout", "content", "quotes", "unicodebidi",
+            "hyphens", "touchaction", "transformstyle", "backfacevisibility", "appearance",
+            "willchange", "scrollbehavior", "overscrollbehavior", "overscrollbehaviorx",
+            "overscrollbehaviory", "masktype", "maskcomposite", "maskmode", "maskrepeat",
+            "maskorigin", "maskclip", "breakinside", "breakafter", "breakbefore",
+            "pagebreakinside", "pagebreakafter", "pagebreakbefore", "textanchor",
+            "dominantbaseline", "alignmentbaseline", "paintorder", "vectoreffect"
+        )
+
         /** Returns true when a React.CSSProperties key never represents a pixel length. */
         internal fun isNonPixelProp(prop: String): Boolean {
             if (prop in NON_PIXEL_PROPS) return true
             val lower = prop.lowercase()
+            val key = lower.replace("-", "")
+            if (key in STRING_VALUED_PROPS) return true
             // prefix/suffix rules: keep these out of px conversion
             if (lower.startsWith("zindex") || lower.startsWith("z-index")) return true
             if (lower == "fontweight" || lower == "font-weight") return true

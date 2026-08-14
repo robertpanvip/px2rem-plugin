@@ -81,4 +81,16 @@ class InlineStyleExtractorEdgeCasesTest {
         assertTrue(body.contains("order: 2;"), "body=$body")
         assertTrue(body.contains("line-clamp: 3;"), "body=$body")
     }
+
+    // Bug #5: import specifier must never become "./../..." — sibling/parent dirs use "../x",
+    // same dir gets "./x", already-relative and absolute paths pass through unchanged.
+    @Test
+    fun `css module import specifier never becomes dot-dot-dot slash`() {
+        assertEquals("./Button.module.css", CssModuleImportPath.specifier("Button.module.css"))
+        assertEquals("./components/Button.module.css", CssModuleImportPath.specifier("components/Button.module.css"))
+        assertEquals("../styles/Button.module.css", CssModuleImportPath.specifier("../styles/Button.module.css"))
+        assertEquals("../../shared/Button.module.css", CssModuleImportPath.specifier("../../shared/Button.module.css"))
+        assertEquals("./already.module.css", CssModuleImportPath.specifier("./already.module.css"))
+        assertEquals("/abs/path/Button.module.css", CssModuleImportPath.specifier("/abs/path/Button.module.css"))
+    }
 }

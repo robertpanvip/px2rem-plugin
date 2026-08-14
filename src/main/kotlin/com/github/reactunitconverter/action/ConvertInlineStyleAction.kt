@@ -83,18 +83,28 @@ class ConvertInlineStyleAction : BaseIntentionAction() {
         WriteCommandAction.writeCommandAction(project, file)
             .withName("Convert px to ${config.unitToConvert} in inline style")
             .run<Throwable> {
-                for ((ptr, _) in pointers) {
-                    val el = ptr.element ?: continue
-                    val styleSrc = el.text
-                    val convs = converter.scan(styleSrc, "style")
-                    if (convs.isEmpty()) continue
-                    if (convs.any { it.isDynamic }) anyDynamic = true
-                    val newSrc = converter.apply(styleSrc, convs)
-                    val startOff = el.textRange.startOffset
-                    val endOff = startOff + styleSrc.length
-                    if (endOff > document.textLength) continue
-                    document.replaceString(startOff, endOff, newSrc)
-                }
+        // Collect all replacements up-front using ORIGINAL offsets. Applying them one-by-one
+        // while iterating the same PSI elements would corrupt later offsets after the first
+        // replaceString (the PSI tree is not re-parsed in between), scrambling multiple
+        // style objects (Bug #3).
+        data class Edit(val start: Int, val end: Int, val text: String)
+        val edits = mutableListOf<Edit>()
+        for ((ptr, _) in pointers) {
+            val el = ptr.element ?: continue
+            val styleSrc = el.text
+            val convs = converter.scan(styleSrc, "style")
+            if (convs.isEmpty()) continue
+            if (convs.any { it.isDynamic }) anyDynamic = true
+            val newSrc = converter.apply(styleSrc, convs)
+            val startOff = el.textRange.startOffset
+            val endOff = startOff + styleSrc.length
+            if (endOff > document.textLength) continue
+            edits += Edit(startOff, endOff, newSrc)
+        }
+        // Apply in reverse document order (later text first) so earlier offsets stay valid.
+        edits.sortedByDescending { it.start }.forEach { e ->
+            document.replaceString(e.start, e.end, e.text)
+        }
                 if (anyDynamic) {
                     helperFile = helperService.findOrCreateHelper()
                     val h = helperFile

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-export JAVA_HOME=/tmp/tools/jdk-17
+export JAVA_HOME=/tmp/jdk17/jdk-17.0.20+8
 export PATH="$JAVA_HOME/bin:$PATH"
 
 LIB=/tmp/build/lib
@@ -24,6 +24,7 @@ src/main/kotlin/com/github/reactunitconverter/extract/ClassNameInferencer.kt
 src/main/kotlin/com/github/reactunitconverter/config/Px2RemConfigDetector.kt
 src/main/kotlin/com/github/reactunitconverter/service/ProjectConfigState.kt
 src/main/kotlin/com/github/reactunitconverter/analyzer/ReactCssPropertyShape.kt
+src/main/kotlin/com/github/reactunitconverter/extract/CssModuleImportPath.kt
 EOF
 
 find src/test/kotlin -name "*.kt" -type f | sort > /workspace/.build/test_sources.list

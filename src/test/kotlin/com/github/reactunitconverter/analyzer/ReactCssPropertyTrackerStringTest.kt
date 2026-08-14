@@ -21,6 +21,15 @@ class ReactCssPropertyTrackerStringTest {
         assertFalse(ReactCssPropertyShape.looksLikeReactCssProperties("CSSProperties[\"width\"]"))
     }
 
+    // Bug #2: indexed CSSProperties[...] types are a VALUE, not a whole style object.
+    @Test
+    fun `indexed CSSProperties types are never treated as a whole style object`() {
+        assertFalse(ReactCssPropertyShape.looksLikeReactCssProperties("React.CSSProperties[\"width\"]"))
+        assertFalse(ReactCssPropertyShape.looksLikeReactCssProperties("React.CSSProperties['marginTop']"))
+        assertFalse(ReactCssPropertyShape.looksLikeReactCssProperties("CSSProperties[\"height\"]"))
+        assertFalse(ReactCssPropertyShape.looksLikeReactCssProperties("Partial<CSSProperties>[\"padding\"]"))
+    }
+
     // --- looksLikeCssPropertyValueType ---
     @Test
     fun `recognizes indexed CSSProperties value types`() {

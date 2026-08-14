@@ -42,3 +42,16 @@ export function pxToVw(px?: number | string, viewportWidth: number = 750): strin
   if (typeof px !== "number" || Number.isNaN(px)) return px as unknown as string;
   return `${(px * 100) / viewportWidth}vw`;
 }
+
+/** Same helper but using project viewportHeight 1334 (plugin default for vh projects). */
+export function pxToVh(px?: number | string, viewportHeight: number = 1334): string | number | undefined | null {
+  if (px === null || px === undefined) return px;
+  if (typeof px === "string") {
+    if (!/^\s*-?\d+(?:\.\d+)?\s*px\s*$/i.test(px)) return px;
+    const parsed = parseFloat(px);
+    if (Number.isNaN(parsed)) return px;
+    return `${(parsed * 100) / viewportHeight}vh`;
+  }
+  if (typeof px !== "number" || Number.isNaN(px)) return px as unknown as string;
+  return `${(px * 100) / viewportHeight}vh`;
+}

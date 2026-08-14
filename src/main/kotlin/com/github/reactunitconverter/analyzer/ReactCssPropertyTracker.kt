@@ -270,41 +270,21 @@ object ReactCssPropertyTracker {
         return hint >= 1
     }
 
-    fun looksLikeReactCssProperties(typeText: String): Boolean {
-        val t = typeText.replace(" ", "")
-        return t.contains("React.CSSProperties") ||
-                t.contains("CSSProperties") && !t.contains("React.CSSProperties[") ||
-                t == "CSSProperties" ||
-                t.contains("React.CSSProperty") ||
-                t.contains("import('react').CSSProperties") ||
-                t.startsWith("Partial<CSSProperties>") || t.startsWith("React.CSSProperties")
-    }
+    /**
+     * Delegates to [ReactCssPropertyShape] so the PSI tracker and the string-level
+     * heuristics can never drift again (Bug #2: indexed types such as
+     * `CSSProperties["width"]` are a *value* type, NOT a whole `CSSProperties` object —
+     * the shape adds a `t.contains("[")` guard that the old duplicated logic missed).
+     */
+    fun looksLikeReactCssProperties(typeText: String): Boolean =
+        ReactCssPropertyShape.looksLikeReactCssProperties(typeText)
 
-    fun looksLikeCssPropertyValueType(typeText: String): Boolean {
-        val t = typeText
-        // React.CSSProperties["width"] → value type for a pixel prop
-        if (t.contains("CSSProperties[") && Regex("""CSSProperties\[['"]?[a-zA-Z-]+['"]?]""").containsMatchIn(t)) {
-            val prop = Regex("""CSSProperties\[['"]?([a-zA-Z-]+)['"]?]""").find(t)?.groupValues?.get(1)
-                ?: return true
-            return !isNonPixelPropName(prop)
-        }
-        // React.CSSPropertiesValue / string literal unions like "1px"|"2px" etc.
-        if (t.contains("CSSPropertyValue")) return true
-        if (t.startsWith("React.CSSProperty")) return true
-        return false
-    }
+    fun looksLikeCssPropertyValueType(typeText: String): Boolean =
+        ReactCssPropertyShape.looksLikeCssPropertyValueType(typeText)
 
-    private fun isNonPixelPropName(prop: String): Boolean {
-        val p = prop.replace("-", "").lowercase()
-        return setOf(
-            "zindex", "z-index", "flex", "flexgrow", "flexshrink", "flex-grow", "flex-shrink",
-            "fontweight", "font-weight", "opacity", "order", "lineclamp", "line-clamp",
-            "tabsize", "tab-size", "orphans", "widows", "columns", "columncount", "column-count",
-            "animationiterationcount", "animation-iteration-count",
-            "counterincrement", "counterreset", "gridcolumn", "gridrow", "grid-row", "grid-column"
-        ).contains(p) ||
-                p == "fontweight" || p == "opacity" || p == "order"
-    }
+    /** Single source of truth for "prop never holds a pixel length" — kept in sync with the shape. */
+    private fun isNonPixelPropName(prop: String): Boolean =
+        ReactCssPropertyShape.isNonPixelPropName(prop)
 
     /** Resolve helpers that work on XmlAttribute / attribute value style references. */
     fun analyzeStyleObject(attr: XmlAttribute): Verdict {

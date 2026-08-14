@@ -1,6 +1,7 @@
 package com.github.reactunitconverter.action
 
 import com.github.reactunitconverter.extract.ClassNameInferencer
+import com.github.reactunitconverter.extract.CssModuleImportPath
 import com.github.reactunitconverter.extract.InlineStyleExtractor
 import com.github.reactunitconverter.service.AppSettingsService
 import com.github.reactunitconverter.ui.RenameClassNameDialog
@@ -270,8 +271,9 @@ class ExtractToCssModuleAction : BaseIntentionAction() {
     private fun ensureCssModuleImport(psiFile: PsiFile, moduleFile: VirtualFile, doc: com.intellij.openapi.editor.Document, project: Project, importName: String) {
         val file = psiFile.virtualFile ?: return
         val rel = VfsUtil.findRelativePath(file.parent, moduleFile, '/') ?: moduleFile.path
-        val expected = """import $importName from "./$rel";"""
-        if (doc.text.contains(expected) || doc.text.contains("""import $importName from '$rel';""")) return
+        val spec = CssModuleImportPath.specifier(rel)
+        val expected = """import $importName from "$spec";"""
+        if (doc.text.contains(expected) || doc.text.contains("""import $importName from '$spec';""")) return
         // find last import statement
         val importLines = Regex("""^\s*import\s+[^;]+;\s*$""", RegexOption.MULTILINE).findAll(doc.text).toList()
         val insertOff = if (importLines.isEmpty()) 0 else importLines.last().range.endInclusive + 1

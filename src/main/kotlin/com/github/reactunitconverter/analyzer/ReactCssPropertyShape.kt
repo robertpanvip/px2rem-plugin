@@ -37,7 +37,8 @@ object ReactCssPropertyShape {
         return false
     }
 
-    private fun isNonPixelPropName(cssOrReactName: String): Boolean {
+    @JvmStatic
+    internal fun isNonPixelPropName(cssOrReactName: String): Boolean {
         val n = cssOrReactName.replace("-", "").lowercase()
         return n in setOf(
             "zindex", "fontweight", "opacity", "flex", "flexgrow", "flexshrink",
