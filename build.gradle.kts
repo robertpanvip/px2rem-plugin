@@ -98,6 +98,9 @@ tasks {
 dependencies {
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("org.yaml:snakeyaml:2.2")
+    // kotlin.test 断言（kotlin.test.assertTrue/assertFalse/assertEquals 等）——测试源全部 import kotlin.test.*
+    // junit-jupiter 只提供 @Test / TempDir / 运行器，不包含 kotlin.test 断言 API
+    testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testImplementation("org.mockito:mockito-core:5.5.0")
 }
