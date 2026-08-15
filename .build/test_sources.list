@@ -5,6 +5,7 @@ src/test/kotlin/com/github/reactunitconverter/converter/InlineStylePxConverterTe
 src/test/kotlin/com/github/reactunitconverter/extract/ClassNameInferencerTest.kt
 src/test/kotlin/com/github/reactunitconverter/extract/InlineStyleExtractorEdgeCasesTest.kt
 src/test/kotlin/com/github/reactunitconverter/extract/InlineStyleExtractorTest.kt
+src/test/kotlin/com/github/reactunitconverter/extract/StyleObjectExtractionTest.kt
 src/test/kotlin/com/github/reactunitconverter/model/Px2RemConfigPropListTest.kt
 src/test/kotlin/com/github/reactunitconverter/runtime/PxToRemHelperServiceTest.kt
 src/test/kotlin/com/github/reactunitconverter/service/ProjectConfigServiceStateTest.kt

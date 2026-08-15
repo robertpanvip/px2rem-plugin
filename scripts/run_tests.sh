@@ -112,6 +112,7 @@ src/main/kotlin/com/github/reactunitconverter/config/Px2RemConfigDetector.kt
 src/main/kotlin/com/github/reactunitconverter/service/ProjectConfigState.kt
 src/main/kotlin/com/github/reactunitconverter/analyzer/ReactCssPropertyShape.kt
 src/main/kotlin/com/github/reactunitconverter/extract/CssModuleImportPath.kt
+src/main/kotlin/com/github/reactunitconverter/extract/StyleObjectExtraction.kt
 EOF
 
 cd "$ROOT"

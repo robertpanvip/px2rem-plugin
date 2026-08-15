@@ -2,10 +2,12 @@ package com.github.reactunitconverter.action
 
 import com.github.reactunitconverter.analyzer.ReactCssPropertyTracker
 import com.github.reactunitconverter.converter.InlineStylePxConverter
+import com.github.reactunitconverter.extract.StyleObjectExtraction
 import com.github.reactunitconverter.runtime.PxToRemHelperService
 import com.github.reactunitconverter.service.ProjectConfigService
 import com.intellij.codeInsight.intention.impl.BaseIntentionAction
 import com.intellij.lang.javascript.psi.*
+import com.intellij.lang.javascript.psi.ecma6.TypeScriptVariable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.editor.Editor
@@ -140,13 +142,52 @@ class ConvertInlineStyleAction : BaseIntentionAction() {
                 }
             }
             val out = mutableListOf<JSObjectLiteralExpression>()
+            // 1) inline object literals: style={{ ... }} (existing behavior)
             file.accept(object : JSRecursiveElementVisitor() {
                 override fun visitJSObjectLiteralExpression(node: JSObjectLiteralExpression) {
                     if (isInsideStyleAttr(node)) out += node
                     super.visitJSObjectLiteralExpression(node)
                 }
             })
+            // 2) style={styles} variable references → resolve the reference and convert the
+            //    declaration's object-literal initializer in place (works for
+            //    `const styles: React.CSSProperties = {...}` / `const styles = {...}` /
+            //    `const styles = {...} as React.CSSProperties`).
+            for (attr in PsiTreeUtil.collectElementsOfType(file, XmlAttribute::class.java)) {
+                if (!isStyleAttrName(attr)) continue
+                val value = attr.valueElement ?: continue
+                // inline object literals were already collected above
+                if (PsiTreeUtil.findChildOfType(value, JSObjectLiteralExpression::class.java) != null) continue
+                val ref = PsiTreeUtil.findChildOfType(value, JSReferenceExpression::class.java) ?: continue
+                val variable = resolveStyleVariable(ref) ?: continue
+                // keep the pure text check as the tested source of truth before trusting the PSI initializer
+                if (StyleObjectExtraction.objectLiteralSource(variable.text) == null) continue
+                val initializer = initializerOf(variable) ?: continue
+                if (initializer !in out) out += initializer
+            }
             return out
+        }
+
+        /** True when [ref] resolves to a variable declaration (`const/let/var styles = ...`). */
+        private fun resolveStyleVariable(ref: JSReferenceExpression): PsiElement? {
+            val target = ref.resolve() ?: return null
+            return when (target) {
+                is JSVariable, is TypeScriptVariable -> target
+                else -> null
+            }
+        }
+
+        /** The object-literal initializer of a style variable, or null when it isn't an object literal. */
+        private fun initializerOf(variable: PsiElement): JSObjectLiteralExpression? =
+            when (variable) {
+                is JSVariable -> variable.initializer as? JSObjectLiteralExpression
+                is TypeScriptVariable -> variable.initializer as? JSObjectLiteralExpression
+                else -> null
+            }
+
+        private fun isStyleAttrName(attr: XmlAttribute): Boolean {
+            val name = attr.name?.trim() ?: return false
+            return name.equals("style", ignoreCase = true) || name.endsWith("Style")
         }
 
         private fun findEnclosingStyleObject(leaf: PsiElement): JSObjectLiteralExpression? {
@@ -161,11 +202,7 @@ class ConvertInlineStyleAction : BaseIntentionAction() {
 
         private fun isInsideStyleAttr(obj: JSObjectLiteralExpression): Boolean {
             val attr = PsiTreeUtil.getParentOfType(obj, XmlAttribute::class.java) ?: return false
-            val name = attr.name?.trim() ?: return false
-            if (name.equals("style", ignoreCase = true) || name.endsWith("Style", ignoreCase = false)) {
-                return true
-            }
-            return false
+            return isStyleAttrName(attr)
         }
 
         /** True when a JSProperty's name matches a React style-like property (camelCase layout key). */
